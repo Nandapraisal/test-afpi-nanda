@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AFPI Statistics Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sql.js@1.8.0/dist/sql-wasm.js"></script>
+    <style>
+        :root {
+            --afpi-green: #2e7d32;
+            --afpi-light-green: #4caf50;
+            --afpi-lime: #8bc34a;
+            --afpi-teal: #26a69a;
+            --afpi-blue: #29b6f6;
+            --afpi-dark: #263238;
+            --afpi-light: #f5f7fa;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--afpi-light);
+            color: var(--afpi-dark);
+            background-image: linear-gradient(to bottom right, #f5f7fa, #e8f5e9);
+        }
+
+        .dashboard-header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 25px;
+            background: linear-gradient(135deg, var(--afpi-green), var(--afpi-teal));
+            color: white;
+            border-radius: 12px;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+            border-left: 5px solid var(--afpi-lime);
+        }
+
+        .dashboard-header h1 {
+            margin: 0;
+            font-size: 2.2rem;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+        }
+
+        .dashboard-header p {
+            margin: 10px 0 0;
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .chart-container {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .chart-box {
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            padding: 25px;
+            border-top: 4px solid var(--afpi-light-green);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .chart-box:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.12);
+        }
+
+        .chart-title {
+            text-align: center;
+            margin-bottom: 20px;
+            color: var(--afpi-green);
+            font-weight: bold;
+            font-size: 1.3rem;
+            position: relative;
+            padding-bottom: 10px;
+        }
+
+        .chart-title::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px;
+            height: 3px;
+            background: linear-gradient(to right, var(--afpi-lime), var(--afpi-teal));
+            border-radius: 3px;
+        }
+
+        .data-table {
+            width: 100%;
+            margin: 40px auto 0;
+            border-collapse: separate;
+            border-spacing: 0;
+            background-color: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            border-radius: 12px;
+            overflow: hidden;
+            max-width: 1000px;
+        }
+
+        .data-table th, .data-table td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .data-table th {
+            background: var(--afpi-green);
+            color: white;
+            font-weight: 500;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+        }
+
+        .data-table tr:nth-child(even) {
+            background-color: #f5f5f5;
+        }
+
+        .data-table tr:hover {
+            background-color: #e8f5e9;
+        }
+
+        .validation-cell {
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        .valid {
+            color: #2e7d32;
+            background-color: #e8f5e9;
+            padding: 3px 8px;
+            border-radius: 12px;
+            display: inline-block;
+        }
+
+        .invalid {
+            color: #c62828;
+            background-color: #ffebee;
+            padding: 3px 8px;
+            border-radius: 12px;
+            display: inline-block;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 30px;
+            font-size: 1.1rem;
+            color: var(--afpi-green);
+        }
+
+        .upload-btn {
+            display: block;
+            margin: 30px auto;
+            padding: 12px 30px;
+            background: linear-gradient(to right, var(--afpi-green), var(--afpi-teal));
+            color: white;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            box-shadow: 0 4px 8px rgba(46, 125, 50, 0.3);
+            transition: all 0.3s;
+        }
+
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(46, 125, 50, 0.4);
+            background: linear-gradient(to right, var(--afpi-light-green), var(--afpi-teal));
+        }
+
+        .upload-btn:active {
+            transform: translateY(0);
+        }
+
+        #errorMessage {
+            color: #c62828;
+            text-align: center;
+            margin: 20px;
+            padding: 15px;
+            background-color: #ffebee;
+            border-radius: 8px;
+            border-left: 4px solid #c62828;
+            font-weight: 500;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-header h1 {
+                font-size: 1.8rem;
+            }
+
+            .data-table {
+                font-size: 0.9rem;
+            }
+
+            .data-table th, .data-table td {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-header">
+        <h1>AFPI Statistics Dashboard</h1>
+        <p>Transaction, NPP, and Ticket Size Analysis</p>
+    </div>
+
+    <button id="uploadBtn" class="upload-btn">Upload Database File (test_afpi.db)</button>
+    <div id="loadingIndicator" class="loading" style="display: none;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: inline-block; vertical-align: middle; margin-right: 10px; animation: spin 1s linear infinite;">
+            <path d="M12 2V6" stroke="#2e7d32" stroke-width="2" stroke-linecap="round"/>
+            <path d="M12 18V22" stroke="#2e7d32" stroke-width="2" stroke-linecap="round"/>
+            <path d="M4.93 4.93L7.76 7.76" stroke="#2e7d32" stroke-width="2" stroke-linecap="round"/>
+            <path d="M16.24 16.24L19.07 19.07" stroke="#2e7d32" stroke-width="2" stroke-linecap="round"/>
+            <path d="M2 12H6" stroke="#2e7d32" stroke-width="2" stroke-linecap="round"/>
+            <path d="M18 12H22" stroke="#2e7d32" stroke-width="2" stroke-linecap="round"/>
+            <path d="M4.93 19.07L7.76 16.24" stroke="#2e7d32" stroke-width="2" stroke-linecap="round"/>
+            <path d="M16.24 7.76L19.07 4.93" stroke="#2e7d32" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        Processing database, please wait...
+    </div>
+    <div id="errorMessage" style="display: none;"></div>
+
+    <div class="chart-container" id="chartsContainer" style="display: none;">
+        <div class="chart-box">
+            <h2 class="chart-title">TRX Volume</h2>
+            <canvas id="trxChart"></canvas>
+        </div>
+        <div class="chart-box">
+            <h2 class="chart-title">NPP Volume</h2>
+            <canvas id="nppChart"></canvas>
+        </div>
+        <div class="chart-box">
+            <h2 class="chart-title">Ticket Size (NPP/TRX)</h2>
+            <canvas id="ticketSizeChart"></canvas>
+        </div>
+    </div>
+
+    <table class="data-table" id="dataTable" style="display: none;">
+        <thead>
+            <tr>
+                <th>Month</th>
+                <th>TRX</th>
+                <th>TRX Validation</th>
+                <th>NPP</th>
+                <th>NPP Validation</th>
+                <th>Ticket Size</th>
+            </tr>
+        </thead>
+        <tbody id="dataTableBody"></tbody>
+    </table>
+
+    <script>
+        let SQL = null;
+
+        async function initializeSQL() {
+            try {
+                SQL = await initSqlJs({
+                    locateFile: file => `https://cdn.jsdelivr.net/npm/sql.js@1.8.0/dist/${file}`
+                });
+                document.getElementById('uploadBtn').disabled = false;
+            } catch (error) {
+                document.getElementById('errorMessage').textContent =
+                    `Failed to load SQL.js: ${error.message}`;
+                document.getElementById('errorMessage').style.display = 'block';
+            }
+        }
+
+        document.getElementById('uploadBtn').addEventListener('click', function() {
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = '.db,.sqlite';
+
+            fileInput.onchange = async function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                try {
+                    document.getElementById('uploadBtn').style.display = 'none';
+                    document.getElementById('loadingIndicator').style.display = 'block';
+                    document.getElementById('errorMessage').style.display = 'none';
+
+                    const arrayBuffer = await file.arrayBuffer();
+                    processDatabase(new SQL.Database(new Uint8Array(arrayBuffer)));
+                } catch (error) {
+                    document.getElementById('errorMessage').textContent =
+                        `Error: ${error.message}`;
+                    document.getElementById('errorMessage').style.display = 'block';
+                    document.getElementById('loadingIndicator').style.display = 'none';
+                    document.getElementById('uploadBtn').style.display = 'block';
+                }
+            };
+
+            fileInput.click();
+        });
+
+        function processDatabase(db) {
+            try {
+                // 1. Get all data in one query with proper ordering
+                const query = `
+                    SELECT
+                        t.bulan,
+                        trx,
+                        npp,
+                        ticket_size
+                    FROM trx t
+                    JOIN npp n ON n.bulan = t.bulan
+                    JOIN ticket_size ts ON n.bulan = ts.bulan
+                    ORDER BY date(t.bulan)
+                `;
+
+                const result = db.exec(query);
+                const rawData = result[0]?.values || [];
+
+                // 2. Process the data with validation
+                const combinedData = rawData.map((row, index, arr) => {
+                    const [bulan, trx, npp, ticket_size] = row;
+                    const prevRow = index > 0 ? arr[index-1] : null;
+
+                    return {
+                        bulan,
+                        trx,
+                        npp,
+                        ticket_size,
+                        trxValid: index === 0 ? true : trx > prevRow[1],
+                        nppValid: index === 0 ? true : npp >= prevRow[2]
+                    };
+                });
+
+                // 3. Display the data
+                document.getElementById('loadingIndicator').style.display = 'none';
+                document.getElementById('chartsContainer').style.display = 'flex';
+                document.getElementById('dataTable').style.display = 'table';
+
+                // Populate table
+                const tableBody = document.getElementById('dataTableBody');
+                tableBody.innerHTML = '';
+                combinedData.forEach((row, index) => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${row.bulan}</td>
+                        <td>${row.trx.toLocaleString()}</td>
+                        <td class="validation-cell ${row.trxValid ? 'valid' : 'invalid'}">
+                            ${row.trxValid ? '✓' : '✗'} ${index > 0 ? `(${((row.trx/combinedData[index-1].trx-1)*100).toFixed(2)}%)` : ''}
+                        </td>
+                        <td>${row.npp.toLocaleString()}</td>
+                        <td class="validation-cell ${row.nppValid ? 'valid' : 'invalid'}">
+                            ${row.nppValid ? '✓' : '✗'} ${index > 0 ? `(${((row.npp/combinedData[index-1].npp-1)*100).toFixed(2)}%)` : ''}
+                        </td>
+                        <td>${row.ticket_size.toFixed(6)}</td>
+                    `;
+                    tableBody.appendChild(tr);
+                });
+
+                // 4. Create charts with vibrant colors
+                createChart('trxChart', 'TRX Volume', combinedData.map(d => d.trx), combinedData.map(d => d.bulan), '#2e7d32');
+                createChart('nppChart', 'NPP Volume', combinedData.map(d => d.npp), combinedData.map(d => d.bulan), '#4caf50', 'bar');
+                createChart('ticketSizeChart', 'Ticket Size (NPP/TRX)', combinedData.map(d => d.ticket_size), combinedData.map(d => d.bulan), '#26a69a');
+
+            } catch (error) {
+                document.getElementById('errorMessage').textContent =
+                    `Error processing database: ${error.message}`;
+                document.getElementById('errorMessage').style.display = 'block';
+                document.getElementById('loadingIndicator').style.display = 'none';
+                document.getElementById('uploadBtn').style.display = 'block';
+                console.error("Database error details:", error);
+            }
+        }
+
+        function createChart(id, label, data, labels, color, type = 'line') {
+            const ctx = document.getElementById(id).getContext('2d');
+            new Chart(ctx, {
+                type: type,
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: label,
+                        data: data,
+                        borderColor: color,
+                        backgroundColor: type === 'bar' ?
+                            `rgba(${hexToRgb(color).r}, ${hexToRgb(color).g}, ${hexToRgb(color).b}, 0.7)` :
+                            `rgba(${hexToRgb(color).r}, ${hexToRgb(color).g}, ${hexToRgb(color).b}, 0.1)`,
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: type === 'line',
+                        pointBackgroundColor: '#ffffff',
+                        pointBorderColor: color,
+                        pointBorderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                font: {
+                                    size: 14,
+                                    weight: 'bold'
+                                },
+                                padding: 20,
+                                usePointStyle: true,
+                                pointStyle: 'circle'
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: '#263238',
+                            titleFont: {
+                                size: 16,
+                                weight: 'bold'
+                            },
+                            bodyFont: {
+                                size: 14
+                            },
+                            padding: 12,
+                            cornerRadius: 12,
+                            displayColors: true,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += label.includes('Ticket Size')
+                                            ? context.parsed.y.toFixed(6)
+                                            : context.parsed.y.toLocaleString();
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            grid: {
+                                color: 'rgba(0,0,0,0.05)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: '#607d8b',
+                                font: {
+                                    weight: 'bold'
+                                },
+                                callback: function(value) {
+                                    if (label.includes('Ticket Size')) {
+                                        return value.toFixed(6);
+                                    }
+                                    return value.toLocaleString();
+                                }
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false,
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: '#607d8b',
+                                font: {
+                                    weight: 'bold'
+                                }
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 1500,
+                        easing: 'easeOutQuart'
+                    }
+                }
+            });
+        }
+
+        function hexToRgb(hex) {
+            // Convert hex to RGB
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return { r, g, b };
+        }
+
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeSQL();
+            document.getElementById('uploadBtn').disabled = true;
+
+            // Add spin animation for loading indicator
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+            `;
+            document.head.appendChild(style);
+        });
+    </script>
+</body>
+</html>
